@@ -5,7 +5,8 @@
 .DESCRIPTION
   Registers two MCP servers per agent:
     playwright       Playwright MCP in extension mode: your normal Chrome profile and sessions. With the extension's
-                     token it connects without asking each time; --background keeps your window in front.
+                     token it connects without asking each time; --background (when the installed release supports it) keeps
+                     your window in front.
     chrome-devtools  Google's Chrome DevTools MCP with --autoConnect (Chrome 144+): debugging, performance, network.
                      Each Chrome session needs remote debugging enabled at chrome://inspect/#remote-debugging and the
                      connection prompt accepted, so agents should prefer playwright for routine browsing.
@@ -34,12 +35,17 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $UserHome = [Environment]::GetFolderPath('UserProfile')
-$PlaywrightArgs = @('-y', '@playwright/mcp@latest', '--extension', '--background')
+$PlaywrightArgs = @('-y', '@playwright/mcp@latest', '--extension')
+# Newer @playwright/mcp releases add --background (keep the browser window behind); add it once `npx @playwright/mcp --help` lists it.
+if ((npx -y @playwright/mcp@latest --help 2>&1 | Out-String) -match '--background') { $PlaywrightArgs += '--background' }
 $DevtoolsArgs = @('-y', 'chrome-devtools-mcp@latest', '--autoConnect')
 
 $token = $null
 if (-not $Undo) {
-    if (Test-Path $TokenFile) { $token = (Get-Content $TokenFile -Raw).Trim() }
+    if (Test-Path $TokenFile) {
+        # Accept the bare token or the whole line copied from the extension (NAME=value, quotes optional).
+        $token = ((Get-Content $TokenFile -Raw).Trim() -replace '^\s*PLAYWRIGHT_MCP_EXTENSION_TOKEN\s*[=:]\s*', '').Trim().Trim('"', "'")
+    }
     if (-not $token) {
         Write-Warning "No token in $TokenFile. Playwright will be configured without it and will ask you to approve each connection."
         Write-Warning 'To stop the prompts: install "Playwright Extension" from the Chrome Web Store, copy its PLAYWRIGHT_MCP_EXTENSION_TOKEN into that file, run this script again.'
