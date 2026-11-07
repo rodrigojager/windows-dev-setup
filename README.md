@@ -47,7 +47,7 @@ MIT
 
 ## Inbox identity and recovery
 
-Inbox version: 1.1.0 (check with the script's version action).
+Inbox version: 1.2.0 (check with the script's version action).
 
 Each new delegation stores a random ID and includes it in the worker's user prompt. The Stop hook matches that
 ID in the transcript supplied by the hook, with the matching session ID (Claude Code and Codex JSONL formats).
@@ -64,9 +64,11 @@ Inspect pending and resolve those old tasks manually. Do not resend already comp
 their markers. If a compacted transcript no longer contains the original delegation prompt, the hook likewise
 keeps the pending marker rather than guessing.
 
-The existing OpenCode plugin supplies an empty payload, without a transcript or session ID. It cannot use
-this verification path and will receive a diagnostic instead of an unverified notification; that plugin needs
-a separate integration change. This script registers Stop hooks only for Claude Code and Codex.
+OpenCode uses the matching agent-hooks.js integration in agents-setup. That plugin verifies the completed
+root session through its SDK, extracts IDs only from that session's user messages, and sends the session ID
+and delegation IDs to this script. It does not need a JSONL transcript or inherited pane identity. Older plugins
+that send an empty payload retain pending state with a diagnostic; update both components together.
+This script registers Stop hooks only for Claude Code and Codex; OpenCode runs the plugin on session.idle.
 
 For an isolated regression run (Python 3 and PowerShell 7, no live Herdr or panes):
 

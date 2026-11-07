@@ -20,9 +20,10 @@
     uninstall Remove the Stop hooks (the copied script stays; delete it by hand if wanted).
 
   State lives in ~/.agents/herdr-inbox/<pane>.json. -InboxDirectory selects an isolated state directory.
-  New delegations carry an ID in the user prompt. notify requires session_id and transcript_path from
-  a Claude Code or Codex Stop hook; inherited HERDR_PANE_ID is never used to identify the worker.
-  Legacy markers and hooks without a transcript are retained with a diagnostic, never guessed.
+  New delegations carry an ID in the user prompt. notify verifies a session-bound Claude Code/Codex
+  transcript, or delegation IDs obtained by the OpenCode plugin from its session API.
+  Inherited HERDR_PANE_ID is never used to identify the worker.
+  Legacy markers and hooks without verified identity data are retained with a diagnostic, never guessed.
   Pass -ReplyTo explicitly when the requester also runs through a daemon with inherited pane variables.
 #>
 [CmdletBinding()]
@@ -35,7 +36,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$ScriptVersion = '1.1.0'
+$ScriptVersion = '1.2.0'
 $Home_ = [Environment]::GetFolderPath('UserProfile')
 $Inbox = if ($InboxDirectory) { [IO.Path]::GetFullPath($InboxDirectory) } else { Join-Path $Home_ '.agents/herdr-inbox' }
 $Herdr = if ($env:HERDR_BIN_PATH) { $env:HERDR_BIN_PATH } else { 'herdr' }
@@ -127,10 +128,21 @@ switch ($Action) {
             $files = @(Get-ChildItem -LiteralPath $Inbox -Filter *.json -File)
             if (-not $files.Count) { exit 0 }
             $stage = 'hook lacks session_id or transcript_path; pending delegations retained'
-            if ($payload.session_id -isnot [string] -or -not $payload.session_id -or
-                $payload.transcript_path -isnot [string] -or -not $payload.transcript_path) { throw 'Missing identity.' }
-            $stage = 'transcript unreadable, malformed, or session mismatch; pending delegations retained'
-            $ids = Get-TranscriptIds $payload.transcript_path $payload.session_id
+            if ($payload.session_id -isnot [string] -or -not $payload.session_id) { throw 'Missing session.' }
+            if ($payload.source -ceq 'opencode') {
+                # The trusted local plugin checks the root session and message ownership through its SDK.
+                $stage = 'invalid OpenCode identity payload; pending delegations retained'
+                if ($payload.delegation_ids -isnot [array]) { throw 'Missing delegation IDs.' }
+                $ids = [Collections.Generic.HashSet[string]]::new()
+                foreach ($id in $payload.delegation_ids) {
+                    if ($id -isnot [string] -or $id -cnotmatch '^[0-9a-f]{32}$') { throw 'Invalid delegation ID.' }
+                    [void]$ids.Add($id)
+                }
+            } else {
+                if ($payload.transcript_path -isnot [string] -or -not $payload.transcript_path) { throw 'Missing transcript.' }
+                $stage = 'transcript unreadable, malformed, or session mismatch; pending delegations retained'
+                $ids = Get-TranscriptIds $payload.transcript_path $payload.session_id
+            }
             $candidates = @()
             foreach ($file in $files) {
                 $stage = 'invalid pending marker; pending delegations retained'

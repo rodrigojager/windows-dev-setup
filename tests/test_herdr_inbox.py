@@ -282,9 +282,45 @@ $global:LASTEXITCODE = [int]$env:INBOX_TEST_EXIT
     def test_version_has_no_side_effects(self):
         result = self.run_script("version")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), "1.1.0")
+        self.assertEqual(result.stdout.strip(), "1.2.0")
         self.assertFalse(self.logged())
         self.assertFalse(list(self.inbox.iterdir()))
+
+    def test_opencode_verified_identity_routes_without_pane_environment(self):
+        marker = self.marker()
+        result = self.run_script("notify", payload={"source": "opencode", "session_id": "worker-session",
+                                                  "delegation_ids": [ID, ID]})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(marker.exists())
+        self.assertEqual(len(self.logged()), 1)
+        self.assertIn("herdr agent read test:worker ", self.logged()[0][3])
+
+    def test_opencode_invalid_id_retains_marker(self):
+        marker = self.marker()
+        result = self.run_script("notify", payload={"source": "opencode", "session_id": "worker-session",
+                                                  "delegation_ids": [ID, "invalid"]})
+        self.assertTrue(marker.exists())
+        self.assertFalse(self.logged())
+        self.assertIn("invalid OpenCode", result.stderr)
+
+    def test_opencode_missing_session_is_rejected(self):
+        marker = self.marker()
+        self.run_script("notify", payload={"source": "opencode", "delegation_ids": [ID]})
+        self.assertTrue(marker.exists())
+        self.assertFalse(self.logged())
+
+    def test_opencode_scalar_ids_are_rejected(self):
+        marker = self.marker()
+        self.run_script("notify", payload={"source": "opencode", "session_id": "worker-session", "delegation_ids": ID})
+        self.assertTrue(marker.exists())
+        self.assertFalse(self.logged())
+
+    def test_opencode_ambiguous_markers_are_retained(self):
+        first = self.marker()
+        second = self.marker("test:second", OTHER)
+        self.run_script("notify", payload={"source": "opencode", "session_id": "worker-session", "delegation_ids": [ID, OTHER]})
+        self.assertTrue(first.exists() and second.exists())
+        self.assertFalse(self.logged())
 
 
 if __name__ == "__main__":
