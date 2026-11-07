@@ -27,6 +27,11 @@ Web Store and save its `PLAYWRIGHT_MCP_EXTENSION_TOKEN` alone in `~/.agents/secr
 token never goes into this repository), then run the script again. Chrome DevTools MCP needs remote debugging
 enabled at `chrome://inspect/#remote-debugging` in each Chrome session where you want it.
 
+The Playwright extension mode brings the controlled tab and window to the front (the `--background` option is
+added automatically once the published `@playwright/mcp` supports it). Use it when you are present and the browser
+may take focus; for unattended work, use a headless browser through a script instead (no focus, no logged-in
+sessions).
+
 Open a new terminal afterwards; programs that were already running (editors, AI coding agents) need a restart to
 see the new environment.
 
