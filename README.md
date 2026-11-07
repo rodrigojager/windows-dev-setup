@@ -19,7 +19,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\set-python-utf8.ps1 -Undo  # 
 
 pwsh -File .\scripts\setup-browser-mcp.ps1        # browser MCP servers for Codex and OpenCode
 pwsh -File .\scripts\herdr-inbox.ps1 install      # agent inbox hooks (approve the Codex hook in /hooks once)
-pwsh -File ~\.agents\bin\herdr-inbox.ps1 delegate -To <pane> -Message "<task>"   # from inside a herdr pane
+pwsh -File ~\.agents\bin\herdr-inbox.ps1 delegate -To <pane> -ReplyTo <requester-pane> -Message "<task>"   # from inside a herdr pane
 ```
 
 `setup-browser-mcp.ps1` needs one manual step for prompt-free use: install "Playwright Extension" from the Chrome
@@ -44,3 +44,33 @@ see the new environment.
 ## License
 
 MIT
+
+## Inbox identity and recovery
+
+Inbox version: 1.1.0 (check with the script's version action).
+
+Each new delegation stores a random ID and includes it in the worker's user prompt. The Stop hook matches that
+ID in the transcript supplied by the hook, with the matching session ID (Claude Code and Codex JSONL formats).
+It does not identify the worker using inherited HERDR_PANE_ID, focus, working directory, or a live pane lookup.
+Pass -ReplyTo explicitly if the requester runs in a daemon: its environment may also contain an older pane ID.
+
+The hook retains pending state and writes a short stderr diagnostic if identity cannot be verified, delivery
+fails, or more than one pending delegation matches. Concurrent invocations are serialized per marker. After
+successful delivery the marker is cleared; a crash after submission but before clearing can still cause a retry.
+A new delegation cannot overwrite a pending one.
+
+Markers created by the older script have no delegation ID and are deliberately not delivered automatically.
+Inspect pending and resolve those old tasks manually. Do not resend already completed tasks just to migrate
+their markers. If a compacted transcript no longer contains the original delegation prompt, the hook likewise
+keeps the pending marker rather than guessing.
+
+The existing OpenCode plugin supplies an empty payload, without a transcript or session ID. It cannot use
+this verification path and will receive a diagnostic instead of an unverified notification; that plugin needs
+a separate integration change. This script registers Stop hooks only for Claude Code and Codex.
+
+For an isolated regression run (Python 3 and PowerShell 7, no live Herdr or panes):
+
+    python -m unittest discover -s tests -p "test_herdr_inbox.py" -v
+
+Tests set HERDR_BIN_PATH to a fake transport and pass -InboxDirectory pointing to disposable state. They
+never run install, read the real inbox, or contact a pane.
